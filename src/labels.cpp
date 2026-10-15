@@ -23,7 +23,6 @@
 struct TaskGroup : IInspectable {
     virtual HRESULT STDMETHODCALLTYPE get_AppId(HSTRING*)=0;
 };
-constexpr GUID kTaskGroupIID={0xa152e779,0x93df,0x5be2,{0xaf,0x2c,0xd3,0x42,0x45,0x2b,0x0c,0xe0}};
 using GetLabel=HRESULT(STDMETHODCALLTYPE*)(void*,bool*);
 using GetGroup=HRESULT(STDMETHODCALLTYPE*)(void*,IUnknown**);
 using GetName=HRESULT(STDMETHODCALLTYPE*)(void*,HSTRING*);
@@ -37,7 +36,7 @@ static void** nameSlot=nullptr;
 static void** appTable=nullptr;
 static IWeakReference* models[128]{};
 static HWND modelWindows[128]{};
-constexpr GUID kAppItemIID={0xf5e9d378,0x82f8,0x5e1d,{0xac,0x20,0x46,0x09,0x88,0xaf,0x48,0xf1}};
+constexpr GUID kAppItemIID={0x02695236,0x2049,0x5579,{0x9b,0x5a,0x79,0x3a,0xf7,0x5b,0x44,0x1a}};
 static SharedState* state=nullptr;
 static HANDLE mapping=nullptr;
 static bool pinned=false;
@@ -54,13 +53,12 @@ static bool StartsWithCodeId(HSTRING id) {
 static HWND CodeGroupWindow(void* self) {
     IUnknown* unknown=nullptr;
     if(FAILED(getGroup(self,&unknown)) || !unknown)return nullptr;
-    TaskGroup* group=nullptr;
-    // Task-group IID from WindowsUdk.UI.Shell.ITaskGroup.
-    HRESULT hr=unknown->QueryInterface(kTaskGroupIID,(void**)&group);
-    unknown->Release();
-    if(FAILED(hr)||!group)return nullptr;
+    // get_TaskGroup returns the runtime class's default ITaskGroup interface.
+    // The matching AppId consumer calls slot 6 directly; do not depend on an
+    // IID from an older WindowsUdk contract.
+    TaskGroup* group=(TaskGroup*)unknown;
     HSTRING id=nullptr;
-    hr=group->get_AppId(&id);
+    HRESULT hr=group->get_AppId(&id);
     HWND window=nullptr;
     if(SUCCEEDED(hr)&&StartsWithCodeId(id)&&state) {
         unsigned long pid=0;unsigned long long handle=0;
@@ -126,7 +124,7 @@ static bool MatchModule(HMODULE m) {
     auto nt=(IMAGE_NT_HEADERS64*)(b+dos->e_lfanew);
     auto dir=nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
     auto d=(IMAGE_DEBUG_DIRECTORY*)(b+dir.VirtualAddress);
-    const GUID expected={0x1a545a37,0xeb1e,0x419a,{0xb8,0x35,0xe9,0x4a,0x8f,0x18,0xf0,0x77}};
+    const GUID expected={0x24534974,0xe00e,0x46a5,{0x8f,0x69,0xf6,0x0d,0x0c,0xeb,0x9b,0xd9}};
     for(unsigned i=0;i<dir.Size/sizeof(*d);i++) {
         if(d[i].Type!=IMAGE_DEBUG_TYPE_CODEVIEW||d[i].SizeOfData<24)continue;
         BYTE* cv=b+d[i].AddressOfRawData;
@@ -160,12 +158,12 @@ static LONG Enable(HWND window) {
     stopWatch=CreateEventW(nullptr,TRUE,FALSE,nullptr);
     if(!stopWatch){CloseHandle(owner);return 9;}
     auto base=(BYTE*)m;
-    original=(GetLabel)(base+0x1c2980);
-    getGroup=(GetGroup)(base+0x28d60);
-    auto table=(void**)(base+0x826a70);appTable=table;
-    auto itemTable=(void**)(base+0x8269c0);
-    originalName=(GetName)(base+0xefc10);
-    propertyChanged=(PropertyChanged)(base+0x1391c);
+    original=(GetLabel)(base+0x1c29b0);
+    getGroup=(GetGroup)(base+0x28ef0);
+    auto table=(void**)(base+0x82a0e0);appTable=table;
+    auto itemTable=(void**)(base+0x82a030);
+    originalName=(GetName)(base+0xefc20);
+    propertyChanged=(PropertyChanged)(base+0x13aac);
     nameSlot=nullptr;
     for(int i=6;i<22;i++)if(itemTable[i]==(void*)originalName){nameSlot=&itemTable[i];break;}
     slot=nullptr;

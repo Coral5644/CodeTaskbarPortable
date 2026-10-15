@@ -1,5 +1,20 @@
 # 验证与维护
 
+## 1.1.1 本机验证记录
+
+2026-10-15，实际重启后系统为 Windows **26300.9711**，任务栏组件为 **2608.26001.200.0**。1.1.0 手动启动亦拒绝启用，说明自启配置之外还存在组件更新带来的兼容性问题；没有证据可以单独解释原 HKCU Run 项这次未执行的具体原因。
+
+- 新组件 SHA-256：`CF7E002533DEF6628BA121481A703A06FC30ACCAA5E5CADD1A412F65F2D8BA77`。
+- 匹配的微软 PDB：GUID `24534974-E00E-46A5-8F69-F60D0CEB9BD9`、age 1；下载入口为 [微软符号服务器](https://msdl.microsoft.com/download/symbols/Taskbar.View.pdb/24534974E00E46A58F69F60D0CEB9BD91/Taskbar.View.pdb)。
+- PDB 与原始 PE 核对：AppItem 虚表 RVA `0x82a0e0`，HasLabel 在 slot 29，函数 RVA `0x1c29b0`；Item 虚表 RVA `0x82a030`，DisplayName 在 slot 8，函数 RVA `0xefc20`。
+- TaskGroup getter RVA `0x28ef0`；匹配 AppId consumer 在 RVA `0xf56c` 调用默认接口 slot 6。AppItem IID 改为 `02695236-2049-5579-9b5a-793af75b441a`。OnPropertyChanged RVA `0x13aac`。
+- VS 2022 `/W4 /WX` 构建通过，PowerShell 7 与 Windows PowerShell 5.1 的 smoke 均通过，包括成功启用、静默、单实例、正常恢复和缺少 DLL 的失败托盘。
+- 通过当前用户交互式计划任务启动后，助手状态已启用、模块错误 0；只读共享状态记录到 4 次标签调用和 4 次目标命中。静态布局与该运行时结果共同支持新接口可用；本次没有重新逐项验证多屏及所有标题更新场景。
+- 手动运行登录任务的首次成功检查用时约 0.67 秒（从检查脚本开始计算；不含实际重启和完整登录过程）。任务返回 0，检查脚本与 WScript 均已退出，控制程序保留无主窗口的后台实例。
+- 登录触发器无 Delay，当前用户 Interactive/Limited；无空闲、电池和网络前置条件，失败重试最多 3 次、间隔 1 分钟。移除了已备份的同名旧 HKCU Run 项。
+
+以上为手动启动计划任务与本机运行验证，**尚未再次重启验证登录触发器**。未来系统任务栏组件再次更新，仍可能需要重新适配；自启脚本不绕过兼容性校验。
+
 ## 1.1.0 本机验证记录
 
 2026-10-15，在 Windows 26300.9457 / Taskbar.View.dll 2607.28001.200.0 上完成：

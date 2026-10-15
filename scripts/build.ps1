@@ -37,7 +37,7 @@ $commandFile = Join-Path $buildRoot 'build-native.cmd'
 [IO.File]::WriteAllText($commandFile, $commands, [Text.UTF8Encoding]::new($false))
 & $env:ComSpec /d /c $commandFile
 if ($LASTEXITCODE -ne 0) { throw "编译失败，退出代码：$LASTEXITCODE" }
-[pscustomobject]@{Version='1.1.0';Executable='CodeTaskbar.exe';Dll=$dllName;BuildId=$buildId} |
+[pscustomobject]@{Version='1.1.1';Executable='CodeTaskbar.exe';Dll=$dllName;BuildId=$buildId} |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $buildRoot 'build-manifest.json') -Encoding UTF8
 Get-Item -LiteralPath (Join-Path $binRoot 'CodeTaskbar.exe'),(Join-Path $binRoot $dllName) |
     Select-Object Name,Length,FullName

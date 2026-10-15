@@ -8,7 +8,7 @@
 #include <stdint.h>
 #pragma comment(lib,"user32.lib")
 constexpr wchar_t kAppName[] = L"Code 任务栏助手";
-constexpr wchar_t kVersion[] = L"1.1.0";
+constexpr wchar_t kVersion[] = L"1.1.1";
 #ifndef CODETASKBAR_DLL_FILENAME
 #define CODETASKBAR_DLL_FILENAME L"CodeTaskbarLabels-1.1.dll"
 #endif

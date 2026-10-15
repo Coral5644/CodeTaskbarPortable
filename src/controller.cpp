@@ -117,7 +117,7 @@ static bool HashMatches(const std::wstring& path) {
         if(BCryptCreateHash(alg,&hash,nullptr,0,nullptr,0,0)>=0) {
             BYTE buf[65536],digest[32];DWORD got=0;bool readok=true;
             while(true){if(!ReadFile(f,buf,sizeof(buf),&got,nullptr)){readok=false;break;}if(!got)break;if(BCryptHashData(hash,buf,got,0)<0){readok=false;break;}}
-            const BYTE expected[32]={0x22,0xab,0xd1,0xf0,0xbb,0x23,0xc8,0x96,0x79,0x67,0x64,0x99,0x47,0x3b,0x15,0x04,0xf5,0x3a,0x77,0x86,0xf2,0x82,0x44,0x61,0xc5,0x7b,0xa7,0x34,0x84,0x95,0x55,0x0b};
+            const BYTE expected[32]={0xcf,0x7e,0x00,0x25,0x33,0xde,0xf6,0x62,0x8b,0xa1,0x21,0x48,0x1a,0x70,0x3a,0x06,0xfc,0x30,0xac,0xca,0xa5,0xe5,0xca,0xdd,0x1a,0x41,0x2f,0x65,0xf2,0xd8,0xba,0x77};
             ok=readok&&BCryptFinishHash(hash,digest,32,0)>=0&&memcmp(digest,expected,32)==0;
             BCryptDestroyHash(hash);
         }
@@ -230,7 +230,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR command,int) {
     if(FAILED(com))return 3;
     wchar_t system[32768];GetWindowsDirectoryW(system,_countof(system));
     std::wstring taskbarPath=std::wstring(system)+L"\\SystemApps\\MicrosoftWindows.Client.Core_cw5n1h2txyewy\\Taskbar.View.dll";
-    if(!HashMatches(taskbarPath)) {lastError=L"当前任务栏组件尚未适配。本版本仅支持已校验的 Taskbar.View.dll 2607.28001.200.0，未修改任何任务栏设置。";goto failed;}
+    if(!HashMatches(taskbarPath)) {lastError=L"当前任务栏组件尚未适配。本版本仅支持已校验的 Taskbar.View.dll 2608.26001.200.0，未修改任何任务栏设置。";goto failed;}
     taskbar=FindWindowW(L"Shell_TrayWnd",nullptr);
     if(!taskbar){lastError=L"未找到 Windows 任务栏。";goto failed;}
     {
