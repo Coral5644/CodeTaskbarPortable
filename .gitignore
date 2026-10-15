@@ -1,0 +1,12 @@
+/build/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.log
+status.txt
+__pycache__/
+.vs/
+.vscode/
+# Versioned release artifacts in releases/ are intentionally tracked.
