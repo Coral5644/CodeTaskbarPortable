@@ -1,0 +1,10 @@
+{
+  "architecture": "x64",
+  "testedWindowsBuild": "26300.9711",
+  "module": "Taskbar.View.dll",
+  "moduleVersion": "2608.26001.200.0",
+  "sha256": "CF7E002533DEF6628BA121481A703A06FC30ACCAA5E5CADD1A412F65F2D8BA77",
+  "pdbGuid": "24534974-E00E-46A5-8F69-F60D0CEB9BD9",
+  "pdbAge": 1,
+  "policy": "Reject initialization when the module hash or loaded PDB identity does not match."
+}

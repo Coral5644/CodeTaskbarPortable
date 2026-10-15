@@ -7,7 +7,7 @@ $buildRoot = Join-Path $projectRoot 'build'
 $binRoot = Join-Path $buildRoot 'bin'
 [IO.Directory]::CreateDirectory($binRoot) | Out-Null
 $buildId = [DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff')
-$dllName = "CodeTaskbarLabels-1.1-$buildId.dll"
+$dllName = "CodeTaskbarLabels-1.2-$buildId.dll"
 $generatedHeader = Join-Path $buildRoot 'build-config.h'
 [IO.File]::WriteAllText($generatedHeader,('#define CODETASKBAR_DLL_FILENAME L"' + $dllName + '"'),[Text.UTF8Encoding]::new($false))
 if (-not $VsDevCmd) {
@@ -30,14 +30,16 @@ rc /nologo /fo "$buildRoot\app.res" app.rc
 if errorlevel 1 exit /b 1
 cl /nologo /utf-8 /O2 /MT /W4 /WX /EHsc /std:c++17 /FI"$generatedHeader" /LD /Fe:"$binRoot\$dllName" labels.cpp /Fo:"$buildRoot\labels.obj" /link /DYNAMICBASE /NXCOMPAT /IMPLIB:"$buildRoot\labels.lib"
 if errorlevel 1 exit /b 1
-cl /nologo /utf-8 /O2 /MT /W4 /WX /EHsc /std:c++17 /FI"$generatedHeader" /Fe:"$binRoot\CodeTaskbar.exe" controller.cpp "$buildRoot\app.res" /Fo:"$buildRoot\controller.obj" /link /SUBSYSTEM:WINDOWS /DYNAMICBASE /NXCOMPAT
+cl /nologo /utf-8 /O2 /MT /W4 /WX /EHsc /std:c++17 /c game_identity.cpp /Fo:"$buildRoot\game_identity.obj"
+if errorlevel 1 exit /b 1
+cl /nologo /utf-8 /O2 /MT /W4 /WX /EHsc /std:c++17 /FI"$generatedHeader" /Fe:"$binRoot\CodeTaskbar.exe" controller.cpp "$buildRoot\game_identity.obj" "$buildRoot\app.res" /Fo:"$buildRoot\controller.obj" /link /SUBSYSTEM:WINDOWS /DYNAMICBASE /NXCOMPAT
 exit /b %errorlevel%
 "@
 $commandFile = Join-Path $buildRoot 'build-native.cmd'
 [IO.File]::WriteAllText($commandFile, $commands, [Text.UTF8Encoding]::new($false))
 & $env:ComSpec /d /c $commandFile
 if ($LASTEXITCODE -ne 0) { throw "编译失败，退出代码：$LASTEXITCODE" }
-[pscustomobject]@{Version='1.1.1';Executable='CodeTaskbar.exe';Dll=$dllName;BuildId=$buildId} |
+[pscustomobject]@{Version='1.2.0';Executable='CodeTaskbar.exe';Dll=$dllName;BuildId=$buildId} |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $buildRoot 'build-manifest.json') -Encoding UTF8
 Get-Item -LiteralPath (Join-Path $binRoot 'CodeTaskbar.exe'),(Join-Path $binRoot $dllName) |
     Select-Object Name,Length,FullName

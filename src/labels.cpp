@@ -100,6 +100,15 @@ static HRESULT STDMETHODCALLTYPE DisplayName(void* self,HSTRING* text) {
             HWND window=CodeGroupWindow(app);
             if(window) {
                 RememberModel(app,window);
+                for(LONG i=0;i<state->windowCount&&i<128;i++) {
+                    auto& record=state->windows[i];
+                    if(record.active&&record.window==window&&record.customTitle[0]) {
+                        app->Release();
+                        HRESULT result=WindowsCreateString(record.customTitle,(UINT32)wcsnlen_s(record.customTitle,512),text);
+                        if(SUCCEEDED(result))InterlockedIncrement(&record.titleReads);
+                        return result;
+                    }
+                }
                 wchar_t title[2048];int n=GetWindowTextW(window,title,_countof(title));
                 app->Release();
                 if(n>0)return WindowsCreateString(title,n,text);

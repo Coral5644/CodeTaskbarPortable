@@ -16,7 +16,7 @@ Assert (Test-Path -LiteralPath $Executable) '请先执行 scripts/build.ps1'
 Assert (-not (Get-Process -Name CodeTaskbar -ErrorAction SilentlyContinue)) '请先手动退出当前运行的任务栏助手，避免干扰现有实例'
 $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($Executable)
 Assert ($info.ProductName -eq 'Code 任务栏助手') 'PE 产品名称应为简体中文'
-Assert ($info.FileVersion -eq '1.1.1') 'PE 文件版本应为 1.1.1'
+Assert ($info.FileVersion -eq '1.2.0') 'PE 文件版本应为 1.2.0'
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;

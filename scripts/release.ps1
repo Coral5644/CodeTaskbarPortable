@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 [CmdletBinding()]
-param([ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.1.1', [switch]$SkipBuild)
+param([ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.2.0', [switch]$SkipBuild)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 if (-not $SkipBuild) { & (Join-Path $PSScriptRoot 'build.ps1') }

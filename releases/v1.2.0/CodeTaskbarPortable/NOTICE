@@ -1,0 +1,11 @@
+CodeTaskbarPortable / Code 任务栏助手
+Copyright (c) 2026 CodeTaskbarPortable contributors
+License: GPL-3.0-only. See LICENSE.
+
+The taskbar WinRT interface ABI and per-application label/vtable-hook approach
+reference Taskbar Labels for Windows 11, by Michael Maltsev (m417z), GPL-3.0:
+https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-labels.wh.cpp
+
+This program does not distribute or require the Windhawk engine.
+The icon in assets/ is original project artwork and is licensed under GPL-3.0-only.
+Windows and Visual Studio Code are trademarks of their respective owners.

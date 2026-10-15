@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common.h"
 #include "resource.h"
+#include "game_identity.h"
 #include <shobjidl.h>
 #include <shellapi.h>
 #include <propkey.h>
@@ -8,6 +9,7 @@
 #include <bcrypt.h>
 #include <stdio.h>
 #include <string>
+#include <set>
 #include <wchar.h>
 #pragma comment(lib,"shell32.lib")
 #pragma comment(lib,"ole32.lib")
@@ -25,6 +27,7 @@ static HINSTANCE appInstance=nullptr;
 static HICON trayIcon=nullptr;
 static std::wstring folder;
 static std::wstring lastError;
+static std::set<HWND> applyingWindows;
 static void RestoreLocal() {
     if(!shared)return;
     for(LONG i=0;i<shared->windowCount&&i<128;i++) {
@@ -52,25 +55,40 @@ static void Log(const wchar_t* text) {
     _wfopen_s(&f,(folder+L"CodeTaskbar.log").c_str(),L"a, ccs=UTF-8");
     if(f){SYSTEMTIME t;GetLocalTime(&t);fwprintf(f,L"%04u-%02u-%02u %02u:%02u:%02u %s\n",t.wYear,t.wMonth,t.wDay,t.wHour,t.wMinute,t.wSecond,text);fclose(f);}
 }
-static bool Target(HWND w) {
+// 返回 1 表示 VS Code，2 表示 Minecraft，0 表示保持原样的窗口。
+static int Target(HWND w) {
     if(!IsWindow(w)||!IsWindowVisible(w)||GetAncestor(w,GA_ROOT)!=w||GetWindow(w,GW_OWNER))return false;
     wchar_t cls[128];GetClassNameW(w,cls,_countof(cls));
-    if(wcscmp(cls,L"Chrome_WidgetWin_1")!=0)return false;
     DWORD pid=0;GetWindowThreadProcessId(w,&pid);
     HANDLE p=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid);
     if(!p)return false;
     wchar_t path[32768];DWORD n=_countof(path);
     bool ok=QueryFullProcessImageNameW(p,0,path,&n)!=FALSE;CloseHandle(p);
     auto leaf=ok?wcsrchr(path,L'\\'):nullptr;
-    return leaf&&_wcsicmp(leaf+1,L"Code.exe")==0;
+    if(!leaf)return 0;
+    if(_wcsicmp(leaf+1,L"Code.exe")==0&&wcscmp(cls,L"Chrome_WidgetWin_1")==0)return 1;
+    if((_wcsicmp(leaf+1,L"Minecraft.Windows.exe")==0||_wcsicmp(leaf+1,L"Minecraft.exe")==0)&&
+        !(GetWindowLongPtrW(w,GWL_EXSTYLE)&WS_EX_TOOLWINDOW))return 2;
+    return 0;
 }
 static void ApplyWindow(HWND w) {
-    if(stopping||!shared||!shared->enabled||!Target(w))return;
+    if(stopping||!shared||!shared->enabled)return;
+    int kind=Target(w);if(!kind)return;
+    // WMI/属性存储的 STA 调用可以泵送消息，阻止同一窗口重入接管。
+    if(!applyingWindows.insert(w).second)return;
+    struct ApplyGuard {HWND w;~ApplyGuard(){applyingWindows.erase(w);}} guard{w};
     DWORD pid=0;GetWindowThreadProcessId(w,&pid);
     SharedState::WindowRecord* record=nullptr;
     for(LONG i=0;i<shared->windowCount&&i<128;i++) {
         auto& r=shared->windows[i];
         if(r.active&&r.window==w&&r.pid==pid){record=&r;break;}
+    }
+    std::wstring gameTitle;
+    if(kind==2&&!record) {
+        // 在预留共享记录之前完成可能泵送消息的 WMI 调用，避免重入时复用半成品记录。
+        gameTitle=GameTaskbarTitle(ReadGameCommandLine(pid),pid);
+        DWORD currentPid=0;GetWindowThreadProcessId(w,&currentPid);
+        if(currentPid!=pid||!IsWindow(w))return;
     }
     IPropertyStore* store=nullptr;
     HRESULT hr=SHGetPropertyStoreForWindow(w,IID_PPV_ARGS(&store));
@@ -95,6 +113,10 @@ static void ApplyWindow(HWND w) {
         ZeroMemory(record,sizeof(*record));record->window=w;record->pid=pid;
         record->originalType=ours?VT_EMPTY:old.vt;
         if(!ours&&old.vt==VT_LPWSTR&&old.pwszVal)wcscpy_s(record->originalId,old.pwszVal);
+        if(kind==2) {
+            wcscpy_s(record->customTitle,gameTitle.c_str());
+            Log((L"已识别 Minecraft 标签："+gameTitle).c_str());
+        }
         InterlockedExchange(&record->active,1);
     }
     wchar_t id[128];swprintf_s(id,L"%s%lu.%llx",kIdPrefix,pid,(unsigned long long)(UINT_PTR)w);
@@ -102,7 +124,7 @@ static void ApplyWindow(HWND w) {
     hr=store->SetValue(PKEY_AppUserModel_ID,updated);
     if(SUCCEEDED(hr))hr=store->Commit();
     PropVariantClear(&updated);PropVariantClear(&old);store->Release();
-    if(FAILED(hr))Log(L"未能更新某个 VS Code 窗口的任务栏身份。");
+    if(FAILED(hr))Log(L"未能更新某个目标窗口的任务栏身份。");
 }
 static BOOL CALLBACK EnumCode(HWND w,LPARAM){ApplyWindow(w);return TRUE;}
 static void CALLBACK OnEvent(HWINEVENTHOOK,DWORD event,HWND w,LONG object,LONG child,DWORD,DWORD) {
@@ -163,12 +185,13 @@ static void WriteStatus() {
     fwprintf(f,L"%s %s\n\n运行状态：%s\n错误代码：%ld\n当前处理窗口：%ld\n控制进程 PID：%lu\n\n",
         kAppName,kVersion,shared&&shared->enabled?L"已启用":L"未启用",shared?shared->error:0,live,GetCurrentProcessId());
     if(!lastError.empty())fwprintf(f,L"最近错误：%s\n\n",lastError.c_str());
-    fwprintf(f,L"仅处理 Code.exe，不修改 Windows 全局合并规则。\n通过窗口事件更新，没有定时轮询。\n\n");
+    fwprintf(f,L"处理 VS Code 与 Minecraft，不修改 Windows 全局合并规则。\n通过窗口事件更新，没有定时轮询；游戏按 config 参数的目录名识别开发区。\n\n");
     if(shared)for(LONG i=0;i<shared->windowCount&&i<128;i++) {
         auto& r=shared->windows[i];DWORD pid=0;GetWindowThreadProcessId(r.window,&pid);
         if(!r.active||!IsWindow(r.window)||pid!=r.pid)continue;
         wchar_t title[512];GetWindowTextW(r.window,title,_countof(title));
         fwprintf(f,L"窗口：%s\n  句柄：%llx，进程 PID：%lu\n",title,(unsigned long long)(UINT_PTR)r.window,r.pid);
+        if(r.customTitle[0])fwprintf(f,L"  游戏任务栏标签：%s\n  已返回自定义标签：%ld 次\n",r.customTitle,r.titleReads);
     }
     fclose(f);
 }
@@ -177,16 +200,29 @@ static void OpenTextFile(const wchar_t* name) {
     ShellExecuteW(nullptr,L"open",L"notepad.exe",quoted.c_str(),nullptr,SW_SHOWNORMAL);
 }
 static LRESULT CALLBACK WindowProc(HWND w,UINT msg,WPARAM wp,LPARAM lp) {
-    if(msg==WM_APP+1){ApplyWindow((HWND)wp);if(lp==EVENT_OBJECT_NAMECHANGE&&Target((HWND)wp))Control(3,(LPARAM)wp);return 0;}
+    if(msg==WM_APP+1){
+        if(lp==EVENT_OBJECT_NAMECHANGE&&shared) {
+            DWORD eventPid=0;GetWindowThreadProcessId((HWND)wp,&eventPid);
+            for(LONG i=0;i<shared->windowCount&&i<128;i++) {
+                auto& record=shared->windows[i];
+                // 游戏可能频繁更新原生标题；固定开发区标签无需重复查询或通知。
+                if(record.active&&record.window==(HWND)wp&&record.pid==eventPid&&record.customTitle[0])return 0;
+            }
+        }
+        ApplyWindow((HWND)wp);
+        if(lp==EVENT_OBJECT_NAMECHANGE&&Target((HWND)wp)==1)Control(3,(LPARAM)wp);
+        return 0;
+    }
     if(msg==WM_APP+2) {
         if(LOWORD(lp)==WM_LBUTTONDBLCLK){WriteStatus();OpenTextFile(L"status.txt");return 0;}
         if(LOWORD(lp)==WM_RBUTTONUP||LOWORD(lp)==WM_CONTEXTMENU) {
             HMENU menu=CreatePopupMenu();
-            AppendMenuW(menu,MF_STRING|MF_DISABLED,0,L"Code 任务栏助手 1.1.0");
-            AppendMenuW(menu,MF_STRING|MF_DISABLED,0,shared&&shared->enabled?L"状态：运行中，仅处理 VS Code":L"状态：未启用，请查看日志");
+            std::wstring menuTitle=std::wstring(kAppName)+L" "+kVersion;
+            AppendMenuW(menu,MF_STRING|MF_DISABLED,0,menuTitle.c_str());
+            AppendMenuW(menu,MF_STRING|MF_DISABLED,0,shared&&shared->enabled?L"状态：运行中，VS Code 与 Minecraft":L"状态：未启用，请查看日志");
             AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
             AppendMenuW(menu,MF_STRING,1,L"查看运行状态");
-            AppendMenuW(menu,MF_STRING|((shared&&shared->enabled)?0:MF_GRAYED),3,L"重新检查 VS Code 窗口");
+            AppendMenuW(menu,MF_STRING|((shared&&shared->enabled)?0:MF_GRAYED),3,L"重新检查目标窗口");
             AppendMenuW(menu,MF_STRING,4,L"查看日志");
             AppendMenuW(menu,MF_STRING,5,L"打开程序所在文件夹");
             AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
@@ -222,8 +258,12 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR command,int) {
         if(old)SendMessageTimeoutW(old,wcsstr(command,L"--status")?WM_APP+3:WM_APP+4,0,0,SMTO_ABORTIFHUNG,5000,nullptr);
         return old?0:2;
     }
+    // 同一控制窗口类跨版本保持单实例，升级时应先退出旧实例。
+    if(FindWindowW(kWindowClass,nullptr))return 0;
     wchar_t mapName[128];MappingName(mapName);
-    std::wstring mutexName=std::wstring(mapName)+L".Mutex";
+    DWORD session=0;ProcessIdToSessionId(GetCurrentProcessId(),&session);
+    // 锁沿用旧版本名称，防止不同共享结构的两个版本并发启动。
+    std::wstring mutexName=L"Local\\CodeTaskbarPortable."+std::to_wstring(session)+L".Mutex";
     mutexHandle=CreateMutexW(nullptr,TRUE,mutexName.c_str());
     if(!mutexHandle||GetLastError()==ERROR_ALREADY_EXISTS){if(mutexHandle)CloseHandle(mutexHandle);return 0;}
     HRESULT com=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
